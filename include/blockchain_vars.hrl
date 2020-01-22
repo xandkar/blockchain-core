@@ -226,3 +226,7 @@
 %% Create hexes at this resolution for all the hotspots on the network.
 -define(poc_target_hex_parent_res, poc_target_hex_parent_res).
 %% ------------------------------------------------------------------
+
+
+%% side effect vars
+-define(sweep_neighbors, sweep_neighbors).

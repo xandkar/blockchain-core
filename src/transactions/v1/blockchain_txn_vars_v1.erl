@@ -447,6 +447,7 @@ delayed_absorb(Txn, Ledger) ->
     Vars = decode_vars(vars(Txn)),
     Unsets = decode_unsets(unsets(Txn)),
     ok = blockchain_ledger_v1:vars(Vars, Unsets, Ledger),
+    ok = process_hooks(Vars, Unsets, Ledger),
     case master_key(Txn) of
         <<>> ->
             ok;
@@ -726,6 +727,10 @@ validate_var(?reward_version, Value) ->
 validate_var(?max_bundle_size, Value) ->
     validate_int(Value, "max_bundle_size", 5, 100, false);
 
+%% side effect vars
+validate_var(?sweep_neighbors, Value) ->
+    is_boolean(Value);
+
 validate_var(Var, Value) ->
     %% something we don't understand, crash
     invalid_var(Var, Value).
@@ -742,6 +747,43 @@ invalid_var(Var, Value) ->
 invalid_var(Var, Value) ->
     throw({error, {unknown_var, Var, Value}}).
 -endif.
+
+
+process_hooks(Vars, Unsets, Ledger) ->
+    _ = maps:map(
+          fun(Var, Value) ->
+                  var_hook(Var, Value, Ledger)
+          end, Vars),
+    _ = lists:foreach(
+          fun(Var) ->
+                  unset_hook(Var, Ledger)
+          end, Unsets),
+    ok.
+
+%% separate out hook functions and call them in separate functions
+%% below the hook section.
+var_hook(?sweep_neighbors, true, Ledger) ->
+    neighbor_sweep(Ledger),
+    ok;
+var_hook(_Var, _Value, _Ledger) ->
+    ok.
+
+unset_hook(_Var, _Ledger) ->
+    ok.
+
+
+neighbor_sweep(Ledger) ->
+    case ?MODULE:config(?poc_version, Ledger) of
+        {ok, V} when V > 3 ->
+            Gateways = blockchain_ledger_v1:active_gateways(Ledger),
+            %% find all neighbors for everyone
+            maps:map(
+              fun(A, G) ->
+                      G1 = blockchain_ledger_gateway_v2:neighbors([], G),
+                      blockchain_ledger_v1:update_gateway(G1, A, Ledger)
+              end, Gateways);
+        _ -> ok
+    end.
 
 %% ------------------------------------------------------------------
 %% EUNIT Tests
