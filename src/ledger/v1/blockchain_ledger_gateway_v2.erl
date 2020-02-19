@@ -9,6 +9,7 @@
     new/2, new/3,
     owner_address/1, owner_address/2,
     location/1, location/2,
+    last_location_nonce/1, last_location_nonce/2,
     score/4,
     version/1, version/2,
     add_neighbor/2, remove_neighbor/2,
@@ -23,10 +24,10 @@
     delta/1,
     set_alpha_beta_delta/4,
     add_witness/5,
-    has_witness/2,
+    has_witness/4,
     clear_witnesses/1,
     remove_witness/2,
-    witnesses/1,
+    witnesses/3,
     witness_hist/1, witness_recent_time/1, witness_first_time/1
 ]).
 
@@ -37,6 +38,7 @@
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
+-define(TEST_LOCATION, 631210968840687103).
 -endif.
 
 -record(witness, {
@@ -45,12 +47,14 @@
           hist = erlang:error(no_histogram) :: #{integer() => integer()}, %% sampled rssi histogram
           first_time :: undefined | non_neg_integer(), %% first time a hotspot witnessed this one
           recent_time :: undefined | non_neg_integer(), %% most recent a hotspots witnessed this one
-          time = #{} :: #{integer() => integer()} %% TODO: add time of flight histogram
+          time = #{} :: #{integer() => integer()}, %% TODO: add time of flight histogram
+          challengee_location_nonce :: undefined | non_neg_integer()  %% the nonce value of the challengee GW at the time the witness was added
          }).
 
 -record(gateway_v2, {
     owner_address :: libp2p_crypto:pubkey_bin(),
     location :: undefined | pos_integer(),
+    last_location_nonce :: undefined | non_neg_integer(),       %% the value of the GW nonce at the time of the last location assertion
     alpha = 1.0 :: float(),
     beta = 1.0 :: float(),
     delta :: non_neg_integer(),
@@ -124,6 +128,22 @@ location(Gateway) ->
 -spec location(Location :: pos_integer(), Gateway :: gateway()) -> gateway().
 location(Location, Gateway) ->
     Gateway#gateway_v2{location=Location}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
+-spec last_location_nonce(Gateway :: gateway()) ->  undefined | non_neg_integer().
+last_location_nonce(Gateway) ->
+    Gateway#gateway_v2.last_location_nonce.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
+-spec last_location_nonce(Nonce :: non_neg_integer(), Gateway :: gateway()) -> gateway().
+last_location_nonce(Nonce, Gateway) ->
+    Gateway#gateway_v2{last_location_nonce=Nonce}.
 
 version(Gateway) ->
     Gateway#gateway_v2.version.
@@ -324,13 +344,15 @@ print(Address, Gateway, Ledger, Verbose) ->
     ] ++ Scoring.
 
 
-add_witness(WitnessAddress, WitnessGW = #gateway_v2{nonce=Nonce}, undefined, undefined, Gateway = #gateway_v2{witnesses=Witnesses}) ->
+add_witness(WitnessAddress, WitnessGW = #gateway_v2{nonce=Nonce}, undefined, undefined,
+    Gateway = #gateway_v2{witnesses=Witnesses, last_location_nonce = GWCurLocNonce}) ->
     %% NOTE: This clause is for next hop receipts (which are also considered witnesses) but have no signal and timestamp
     case maps:find(WitnessAddress, Witnesses) of
         {ok, Witness=#witness{nonce=Nonce, count=Count}} ->
             %% nonce is the same, increment the count
             Gateway#gateway_v2{witnesses=maps:put(WitnessAddress,
-                                                  Witness#witness{count=Count + 1},
+                                                  Witness#witness{count=Count + 1,
+                                                                  challengee_location_nonce = GWCurLocNonce},
                                                   Witnesses)};
         _ ->
             %% nonce mismatch or first witnesses for this peer
@@ -338,15 +360,18 @@ add_witness(WitnessAddress, WitnessGW = #gateway_v2{nonce=Nonce}, undefined, und
             Gateway#gateway_v2{witnesses=maps:put(WitnessAddress,
                                                   #witness{count=1,
                                                            nonce=Nonce,
+                                                           challengee_location_nonce = GWCurLocNonce,
                                                            hist=create_histogram(WitnessGW, Gateway)},
                                                   Witnesses)}
     end;
-add_witness(WitnessAddress, WitnessGW = #gateway_v2{nonce=Nonce}, RSSI, TS, Gateway = #gateway_v2{witnesses=Witnesses}) ->
+add_witness(WitnessAddress, WitnessGW = #gateway_v2{nonce=Nonce}, RSSI, TS,
+    Gateway = #gateway_v2{witnesses=Witnesses, last_location_nonce = GWCurLocNonce}) ->
     case maps:find(WitnessAddress, Witnesses) of
         {ok, Witness=#witness{nonce=Nonce, count=Count, hist=Hist}} ->
             %% nonce is the same, increment the count
             Gateway#gateway_v2{witnesses=maps:put(WitnessAddress,
                                                   Witness#witness{count=Count + 1,
+                                                                  challengee_location_nonce = GWCurLocNonce,
                                                                   hist=update_histogram(RSSI, Hist),
                                                                   recent_time=TS},
                                                   Witnesses)};
@@ -357,6 +382,7 @@ add_witness(WitnessAddress, WitnessGW = #gateway_v2{nonce=Nonce}, RSSI, TS, Gate
             Gateway#gateway_v2{witnesses=maps:put(WitnessAddress,
                                                   #witness{count=1,
                                                            nonce=Nonce,
+                                                           challengee_location_nonce = GWCurLocNonce,
                                                            hist=update_histogram(RSSI, Histogram),
                                                            first_time=TS,
                                                            recent_time=TS},
@@ -393,13 +419,13 @@ clear_witnesses(Gateway) ->
 remove_witness(Gateway, WitnessAddr) ->
     Gateway#gateway_v2{witnesses=maps:remove(WitnessAddr, Gateway#gateway_v2.witnesses)}.
 
--spec has_witness(gateway(), libp2p_crypto:pubkey_bin()) -> boolean().
-has_witness(#gateway_v2{witnesses=Witnesses}, WitnessAddr) ->
-    maps:is_key(WitnessAddr, Witnesses).
+-spec has_witness(libp2p_crypto:pubkey_bin(), gateway(), libp2p_crypto:pubkey_bin(), blockchain_ledger_v1:ledger()) -> boolean().
+has_witness(GatewayBin, Gateway, WitnessAddr, Ledger) ->
+    maps:is_key(WitnessAddr, purge_stale_witnesses(GatewayBin, Gateway, Ledger)).
 
--spec witnesses(gateway()) -> #{libp2p_crypto:pubkey_bin() => gateway_witness()}.
-witnesses(Gateway) ->
-    Gateway#gateway_v2.witnesses.
+-spec witnesses(libp2p_crypto:pubkey_bin(), gateway(), blockchain_ledger_v1:ledger()) -> #{libp2p_crypto:pubkey_bin() => gateway_witness()}.
+witnesses(GatewayBin, Gateway, Ledger) ->
+    purge_stale_witnesses(GatewayBin, Gateway, Ledger).
 
 -spec witness_hist(gateway_witness()) -> erlang:error(no_histogram) | histogram().
 witness_hist(Witness) ->
@@ -412,7 +438,6 @@ witness_recent_time(Witness) ->
 -spec witness_first_time(gateway_witness()) -> undefined | non_neg_integer().
 witness_first_time(Witness) ->
     Witness#witness.first_time.
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -474,6 +499,35 @@ convert(#gateway_v1{
        version = Version,
        %% this gets set in the upgrade path
        neighbors = []}.
+
+
+-spec purge_stale_witnesses(libp2p_crypto:pubkey_bin(), gateway(), blockchain_ledger_v2:ledger()) -> #{libp2p_crypto:pubkey_bin() => gateway_witness()}.
+purge_stale_witnesses(_GatewayBin, _Gateway = #gateway_v2{witnesses = Witnesses, last_location_nonce = undefined}, _Ledger)->
+    %% last_location_nonce not yet set, so we must not have reasserted location since this purge fix went begin
+    %% so nothing gets purged, we return all current witnesses
+    %% last_location_nonce will be set next time the GW asserts its location
+    Witnesses;
+purge_stale_witnesses(GatewayBin, Gateway = #gateway_v2{witnesses = Witnesses, last_location_nonce = GWCurNonce}, Ledger)->
+    PurgedWitnesses =
+        maps:fold(fun
+                      (WitnessPubkeyBin, Witness, WitnessesAcc)
+                          when Witness#witness.challengee_location_nonce == undefined ->
+                          %% the witness was added prior to challengee nonce field
+                          %% so update it to the gateway current nonce
+                          maps:put(WitnessPubkeyBin, Witness#witness{challengee_location_nonce = GWCurNonce}, WitnessesAcc);
+                      (WitnessPubkeyBin, Witness, WitnessesAcc)
+                          when Witness#witness.challengee_location_nonce < GWCurNonce ->
+                          %% the witness's nonce is older that the last asserted location nonce, so its stale and will be deleted
+                          maps:remove(WitnessPubkeyBin, WitnessesAcc);
+                      (_WitnessPubkeyBin, _Witness, WitnessesAcc) ->
+                          %% the witness location nonce is same as that of the challengee gateway so we keep it in the map
+                          WitnessesAcc
+                  end,
+            Witnesses, Witnesses),
+    %% update the current gateway with the purged witness map
+    Gateway1 = Gateway#gateway_v2{witnesses = PurgedWitnesses},
+    ok = blockchain_ledger_v1:update_gateway(Gateway1, GatewayBin, Ledger),
+    PurgedWitnesses.
 
 %% ------------------------------------------------------------------
 %% EUNIT Tests
@@ -540,6 +594,49 @@ nonce_test() ->
     Gw = new(<<"owner_address">>, 12),
     ?assertEqual(0, nonce(Gw)),
     ?assertEqual(1, nonce(nonce(1, Gw))).
+
+purge_witnesses_test() ->
+    meck:expect(blockchain_ledger_v1,
+                update_gateway,
+                fun(_, _, _) -> ok end),
+
+    %% create a gateway for the challengee
+    GW = new(<<"challengee_address1">>, ?TEST_LOCATION, 1),
+    %% create a gateway for the witnesses, we share the same GW for all witnesses in this test..doesnt impact the test requirements
+    FakeWitnessGW = new(<<"witness_address1">>, ?TEST_LOCATION, 1),
+
+    %% test with the challengee last_location_nonce = undefined
+    %% this replicates the scenario for GWs which have not re asserted their location
+    %% since this the purge stale witnesses fix was introduced
+    %% in such cases all witnesses are returned, none are purged
+    GW2 = GW#gateway_v2{last_location_nonce = undefined},
+    GW3 = add_witness(<<"witness1">>, FakeWitnessGW, undefined, undefined, GW2),
+    GW4 = add_witness(<<"witness2">>, FakeWitnessGW, undefined, undefined, GW3),
+    Witnesses = witnesses(<<"challengee_address1">>, GW4, fake_ledger),
+    ?assertEqual(2, maps:size(Witnesses)),
+
+
+    %% set the challengee last location nonce to 1, the witnesses challengee_location_nonce is also 1
+    %% this replicates the scenario whereby a challengee has witnesses but has not reasserted location
+    %% since the witnesses were added
+    %% all witnesses are returned, none are purged
+    GW2A = GW#gateway_v2{last_location_nonce = 1},
+    GW3A = add_witness(<<"witness1">>, FakeWitnessGW, undefined, undefined, GW2A),
+    GW4A = add_witness(<<"witness2">>, FakeWitnessGW, undefined, undefined, GW3A),
+    WitnessesA = witnesses(<<"challengee_address1">>, GW4A, fake_ledger),
+    ?assertEqual(2, maps:size(WitnessesA)),
+
+    %% set the challengee last location nonce to 2, the witnesses challengee_location_nonce remains at 1
+    %% this replicates the scenario whereby a challengee GW HAS re asserted its location since
+    %% the original witnesses were last added
+    %% we will also add a new third witness after updating location
+    %% in such cases the first 2 witnesses are purged, the third remains
+    GW2B = GW4A#gateway_v2{last_location_nonce = 2},
+    GW3B = add_witness(<<"witness3">>, FakeWitnessGW, undefined, undefined, GW2B),
+    WitnessesB = witnesses(<<"challengee_address1">>, GW3B, fake_ledger),
+    ?assertEqual(1, maps:size(WitnessesB)),
+    ?assert(maps:is_key(<<"witness3">>, WitnessesB)),
+    meck:unload(blockchain_ledger_v1).
 
 fake_config() ->
     meck:expect(blockchain_event,

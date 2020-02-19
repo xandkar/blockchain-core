@@ -41,7 +41,7 @@
 -module(blockchain_poc_path_v2).
 
 -export([
-    build/5
+    build/6
 ]).
 
 -include("blockchain_utils.hrl").
@@ -53,16 +53,18 @@
 %% It is expected that the "GatewayScoreMap" being passed to build/6 fun
 %% has already been pre-filtered to remove "inactive" gateways.
 -spec build(TargetPubkeyBin :: libp2p_crypto:pubkey_bin(),
+            Ledger :: blockchain:ledger(),
             GatewayScoreMap :: blockchain_utils:gateway_score_map(),
             HeadBlockTime :: pos_integer(),
             Hash :: binary(),
             Vars :: map()) -> path().
-build(TargetPubkeyBin, GatewayScoreMap, HeadBlockTime, Hash, Vars) ->
+build(TargetPubkeyBin, Ledger, GatewayScoreMap, HeadBlockTime, Hash, Vars) ->
     true =  maps:is_key(TargetPubkeyBin, GatewayScoreMap),
     {TargetGw, _} = maps:get(TargetPubkeyBin, GatewayScoreMap),
     TargetGwLoc = blockchain_ledger_gateway_v2:location(TargetGw),
     RandState = blockchain_utils:rand_state(Hash),
     build_(TargetPubkeyBin,
+           Ledger,
            GatewayScoreMap,
            HeadBlockTime,
            Vars,
@@ -74,6 +76,7 @@ build(TargetPubkeyBin, GatewayScoreMap, HeadBlockTime, Hash, Vars) ->
 %% Helpers
 %%%-------------------------------------------------------------------
 -spec build_(TargetPubkeyBin :: libp2p_crypto:pubkey_bin(),
+             Ledger :: blockchain:ledger(),
              GatewayScoreMap :: blockchain_utils:gateway_score_map(),
              HeadBlockTime :: pos_integer(),
              Vars :: map(),
@@ -81,6 +84,7 @@ build(TargetPubkeyBin, GatewayScoreMap, HeadBlockTime, Hash, Vars) ->
              Indices :: [h3:h3_index()],
              Path :: path()) -> path().
 build_(TargetPubkeyBin,
+       Ledger,
        GatewayScoreMap,
        HeadBlockTime,
        #{poc_path_limit := Limit} = Vars,
@@ -89,7 +93,7 @@ build_(TargetPubkeyBin,
        Path) when length(Path) < Limit ->
     %% Try to find a next hop
     {NewRandVal, NewRandState} = rand:uniform_s(RandState),
-    case next_hop(TargetPubkeyBin, GatewayScoreMap, HeadBlockTime, Vars, NewRandVal, Indices) of
+    case next_hop(TargetPubkeyBin, Ledger, GatewayScoreMap, HeadBlockTime, Vars, NewRandVal, Indices) of
         {error, no_witness} ->
             lists:reverse(Path);
         {ok, WitnessPubkeyBin} ->
@@ -98,6 +102,7 @@ build_(TargetPubkeyBin,
             Index = blockchain_ledger_gateway_v2:location(NextHopGw),
             NewPath = [WitnessPubkeyBin | Path],
             build_(WitnessPubkeyBin,
+                   Ledger,
                    GatewayScoreMap,
                    HeadBlockTime,
                    Vars,
@@ -105,19 +110,20 @@ build_(TargetPubkeyBin,
                    [Index | Indices],
                    NewPath)
     end;
-build_(_TargetPubkeyBin, _GatewayScoreMap, _HeadBlockTime, _Vars, _RandState, _Indices, Path) ->
+build_(_TargetPubkeyBin, _Ledger, _GatewayScoreMap, _HeadBlockTime, _Vars, _RandState, _Indices, Path) ->
     lists:reverse(Path).
 
 -spec next_hop(GatewayBin :: blockchain_ledger_gateway_v2:gateway(),
+               Ledger :: blockchain:ledger(),
                GatewayScoreMap :: blockchain_utils:gateway_score_map(),
                HeadBlockTime :: pos_integer(),
                Vars :: map(),
                RandVal :: float(),
                Indices :: [h3:h3_index()]) -> {error, no_witness} | {ok, libp2p_crypto:pubkey_bin()}.
-next_hop(GatewayBin, GatewayScoreMap, HeadBlockTime, Vars, RandVal, Indices) ->
+next_hop(GatewayBin, Ledger, GatewayScoreMap, HeadBlockTime, Vars, RandVal, Indices) ->
     %% Get gateway
     {Gateway, _} = maps:get(GatewayBin, GatewayScoreMap),
-    case blockchain_ledger_gateway_v2:witnesses(Gateway) of
+    case blockchain_ledger_gateway_v2:witnesses(GatewayBin, Gateway, Ledger) of
         W when map_size(W) == 0 ->
             {error, no_witness};
         Witnesses ->
