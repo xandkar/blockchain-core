@@ -914,21 +914,6 @@ num_dcs_for(PubkeyBin, SC) ->
         {error, not_found} -> 0
     end.
 
--spec debug_multiple_scs(SC :: blockchain_state_channel_v1:state_channel(),
-                         KnownSCs :: [blockchain_state_channel_v1:state_channel()]) -> ok.
-debug_multiple_scs(SC, KnownSCs) ->
-    case application:get_env(blockchain, debug_multiple_scs, false) of
-        false ->
-            %% false by default, don't write it out
-            ok;
-        true ->
-            BinSC = term_to_binary(SC),
-            BinKnownSCs = term_to_binary(KnownSCs),
-            ok = file:write_file("/tmp/bin_sc", BinSC),
-            ok = file:write_file("/tmp/known_scs", BinKnownSCs),
-            ok
-    end.
-
 %% ------------------------------------------------------------------
 %% EUNIT Tests
 %% ------------------------------------------------------------------
