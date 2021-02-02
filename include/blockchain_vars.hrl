@@ -403,3 +403,19 @@
 -define(hip17_res_12, hip17_res_12).
 -define(density_tgt_res, density_tgt_res).
 -define(hip17_interactivity_blocks, hip17_interactivity_blocks).
+
+%%%
+%%% validators variables
+%%%
+
+-define(validator_version, validator_version).
+-define(validator_minimum_stake, validator_minimum_stake).  % HNT
+-define(validator_liveness_interval, validator_liveness_interval).  % blocks
+-define(validator_liveness_grace_period, validator_liveness_grace_period).  % blocks
+-define(stake_withdrawl_cooldown, stake_withdrawl_cooldown). % blocks
+%% -define(maximum_overstake, maximum_overstake). % float multiple of min stake
+
+-define(penalty_history_limit, penalty_history_limit). % blocks
+-define(dkg_penalty, dkg_penalty). % float
+
+-define(election_allowed_version, election_allowed_version). % int

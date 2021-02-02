@@ -170,6 +170,18 @@ is_valid(Txn, Chain) ->
                             true -> ok;
                             _ -> throw({error, {wrong_members_size, {N, length(Members)}}})
                         end,
+                        %% if we're on validators make sure that everyone is staked
+                        case blockchain_ledger_v1:config(?election_version, Ledger) of
+                            {ok, N} when N >= 5 ->
+                                case lists:all(fun(M) ->
+                                                       {ok, V} = blockchain_ledger_v1:get_validator(M, Ledger),
+                                                       blockchain_ledger_validator_v1:status(V) == staked end,
+                                               Members) of
+                                    true -> ok;
+                                    false -> throw({error, not_all_validators_staked})
+                                end;
+                            _ -> ok
+                        end,
                         Hash = blockchain_block:hash_block(Block),
                         {ok, OldLedger} = blockchain:ledger_at(EffectiveHeight, Chain),
                         case verify_proof(Proof, Members, Hash, Delay, OldLedger) of
@@ -192,7 +204,9 @@ is_valid(Txn, Chain) ->
 -spec absorb(txn_consensus_group(), blockchain:blockchain()) -> ok | {error, atom()} | {error, {atom(), any()}}.
 absorb(Txn, Chain) ->
     Height = ?MODULE:height(Txn),
+    %% Delay = delay(Txn),
     Ledger = blockchain:ledger(Chain),
+    Members = ?MODULE:members(Txn),
     Check =
         case blockchain_ledger_v1:election_height(Ledger) of
             %% no chain, genesis block
@@ -205,7 +219,20 @@ absorb(Txn, Chain) ->
         end,
     case Check of
         ok ->
-            Members = ?MODULE:members(Txn),
+            %% record stuff for tenuring
+            %% case blockchain_ledger_v1:config(?election_version, Ledger) of
+            %%     {ok, N} when N >= 5 ->
+            %%         lists:foreach(
+            %%           fun(M) ->
+            %%                   case blockchain_ledger_v1:get_validator(M, Ledger) of
+            %%                       {ok, V} ->
+            %%                           V1 = blockchain_ledger_validator_v1:add_recent_election(V, {Height, Delay}, Chain),
+            %%                           blockchain_ledger_v1:update_validator(V1, Ledger)
+            %%                   end
+            %%           end,
+            %%           Members);
+            %%     _ -> ok
+            %% end,
             {ok, Epoch} = blockchain_ledger_v1:election_epoch(Ledger),
             ok = blockchain_ledger_v1:election_epoch(Epoch + 1, Ledger),
             ok = blockchain_ledger_v1:consensus_members(Members, Ledger),
@@ -214,10 +241,6 @@ absorb(Txn, Chain) ->
             Err
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% @end
-%%--------------------------------------------------------------------
 -spec print(txn_consensus_group()) -> iodata().
 print(undefined) -> <<"type=group, undefined">>;
 print(#blockchain_txn_consensus_group_v1_pb{height = Height,
@@ -275,7 +298,10 @@ verify_proof(Proof, Members, Hash, Delay, OldLedger) ->
                     {error, group_verification_failed}
             end;
         _ ->
-            lager:info("groups didn't match: ~ntxn ~p ~nhash ~p", [Members, HashMembers]),
+            lager:info("groups didn't match: ~p ~p ~ntxn ~p ~nhash ~p",
+                       [length(Members), length(HashMembers),
+                        lists:map(fun blockchain_utils:addr2name/1, Members),
+                        lists:map(fun blockchain_utils:addr2name/1, HashMembers)]),
             {error, group_mismatch}
     end.
 
