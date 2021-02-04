@@ -1,5 +1,5 @@
 .PHONY: compile test typecheck ci
-grpc_services_directory=_build/default/lib/sibyl/src/grpc/autogen
+grpc_services_directory=src/grpc/autogen
 
 REBAR=./rebar3
 
