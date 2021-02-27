@@ -687,6 +687,8 @@ absorb_delayed(Block0, Chain0) ->
         % This is so it absorbs genesis
         {ok, H} when H < 2 ->
             absorb_delayed_(Block0, Chain1),
+            ok = blockchain_ledger_v1:maybe_gc_pocs(Chain0, Ledger0),
+            ok = blockchain_ledger_v1:maybe_gc_scs(Chain0),
             ok = blockchain_ledger_v1:commit_context(DelayedLedger1);
         {ok, CurrentHeight} ->
             {ok, DelayedHeight} = blockchain_ledger_v1:current_height(DelayedLedger1),
@@ -707,6 +709,8 @@ absorb_delayed(Block0, Chain0) ->
                                       lists:seq(DelayedHeight+1, DelayedHeight + Lag)),
                     case Res of
                         ok ->
+                            ok = blockchain_ledger_v1:maybe_gc_pocs(Chain0, Ledger0),
+                            ok = blockchain_ledger_v1:maybe_gc_scs(Chain0),
                             ok = blockchain_ledger_v1:commit_context(DelayedLedger1);
                         Error ->
                             Error
@@ -721,8 +725,6 @@ absorb_delayed_(Block, Chain0) ->
         {ok, _} ->
             Hash = blockchain_block:hash_block(Block),
             Ledger0 = blockchain:ledger(Chain0),
-            ok = blockchain_ledger_v1:maybe_gc_pocs(Chain0, Ledger0),
-            ok = blockchain_ledger_v1:maybe_gc_scs(Chain0),
             ok = blockchain_ledger_v1:refresh_gateway_witnesses(Hash, Ledger0),
             ok = blockchain_ledger_v1:maybe_recalc_price(Chain0, Ledger0),
             ok;

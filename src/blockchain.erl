@@ -1741,7 +1741,6 @@ load(Dir, Mode) ->
                         end;
                     _ ->
                         L = blockchain_ledger_v1:new(Dir),
-                        blockchain_ledger_v1:compact(L),
                         L
                 end,
             Blockchain = #blockchain{
@@ -1755,7 +1754,6 @@ load(Dir, Mode) ->
                 snapshots=SnapshotCF,
                 ledger=Ledger
             },
-            compact(Blockchain),
             %% pre-calculate the missing snapshots
             case height(Blockchain) of
                 {ok, ChainHeight} when ChainHeight > 2 ->
