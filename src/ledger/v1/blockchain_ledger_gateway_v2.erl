@@ -6,9 +6,10 @@
 -module(blockchain_ledger_gateway_v2).
 
 -export([
-    new/2, new/3,
+    new/2, new/3, new/4,
     owner_address/1, owner_address/2,
     location/1, location/2,
+    mode/1, mode/2,
     score/4,
     version/1, version/2,
     add_neighbor/2, remove_neighbor/2,
@@ -62,7 +63,8 @@
     version = 0 :: non_neg_integer(),
     neighbors = [] :: [libp2p_crypto:pubkey_bin()],
     witnesses = [] :: witnesses_int(),
-    oui = undefined :: undefined | pos_integer()
+    oui = undefined :: undefined | pos_integer(),
+    mode = full :: mode()
 }).
 
 -type gateway() :: #gateway_v2{}.
@@ -70,7 +72,8 @@
 -type witnesses() :: #{libp2p_crypto:pubkey_bin() => gateway_witness()}.
 -type witnesses_int() :: [{libp2p_crypto:pubkey_bin(), gateway_witness()}].
 -type histogram() :: #{integer() => integer()}.
--export_type([gateway/0, gateway_witness/0, witnesses/0, histogram/0]).
+-type mode() :: light | full.
+-export_type([gateway/0, mode/0, gateway_witness/0, witnesses/0, histogram/0]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -82,18 +85,32 @@ new(OwnerAddress, Location) ->
     #gateway_v2{
         owner_address=OwnerAddress,
         location=Location,
-        delta=1
+        delta=1,
+        mode=full
     }.
 
 -spec new(OwnerAddress :: libp2p_crypto:pubkey_bin(),
           Location :: pos_integer() | undefined,
+          Mode :: mode()) -> gateway().
+new(OwnerAddress, Location, Mode) ->
+    #gateway_v2{
+        owner_address=OwnerAddress,
+        location=Location,
+        delta=1,
+        mode=Mode
+    }.
+
+-spec new(OwnerAddress :: libp2p_crypto:pubkey_bin(),
+          Location :: pos_integer() | undefined,
+          Mode :: mode(),
           Nonce :: non_neg_integer()) -> gateway().
-new(OwnerAddress, Location, Nonce) ->
+new(OwnerAddress, Location, Mode, Nonce) ->
     #gateway_v2{
         owner_address=OwnerAddress,
         location=Location,
         nonce=Nonce,
-        delta=1
+        delta=1,
+        mode=Mode
     }.
 
 %%--------------------------------------------------------------------
@@ -288,6 +305,22 @@ nonce(Gateway) ->
 nonce(Nonce, Gateway) ->
     Gateway#gateway_v2{nonce=Nonce}.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
+-spec mode(Gateway :: gateway()) ->  mode().
+mode(Gateway) ->
+    Gateway#gateway_v2.mode.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
+-spec mode(Mode :: mode(), Gateway :: gateway()) -> gateway().
+mode(Mode, Gateway) ->
+    Gateway#gateway_v2{mode=Mode}.
+
 -spec print(Address :: libp2p_crypto:pubkey_bin(), Gateway :: gateway(),
             Ledger :: blockchain_ledger_v1:ledger()) -> list().
 print(Address, Gateway, Ledger) ->
@@ -310,7 +343,7 @@ print(Address, Gateway, Ledger, Verbose) ->
         case Verbose of
             true ->
                 {NewAlpha, NewBeta, Score} = score(Address, Gateway, Height, Ledger),
-                [ 
+                [
                   {score, Score},
                   {alpha, alpha(Gateway)},
                   {new_alpha, NewAlpha},
@@ -546,7 +579,10 @@ deserialize(<<2, Bin/binary>>) ->
                 L1 = lists:append(L, [undefined]),
                 G1 = list_to_tuple(L1),
                 neighbors([], G1);
+            %% pre mode upgrade ?  TODO %% is this required ?
             13 ->
+                Gw;
+            14 ->
                 Gw
         end,
     Neighbors = neighbors(Gw1),
@@ -615,28 +651,44 @@ new_test() ->
         last_poc_challenge = undefined,
         last_poc_onion_key_hash = undefined,
         nonce = 0,
-        delta=1
+        delta=1,
+        mode=full
     },
     ?assertEqual(Gw, new(<<"owner_address">>, 12)).
 
 owner_address_test() ->
-    Gw = new(<<"owner_address">>, 12),
+    Gw = new(<<"owner_address">>, 12, full),
     ?assertEqual(<<"owner_address">>, owner_address(Gw)),
     ?assertEqual(<<"owner_address2">>, owner_address(owner_address(<<"owner_address2">>, Gw))).
 
 location_test() ->
-    Gw = new(<<"owner_address">>, 12),
+    Gw = new(<<"owner_address">>, 12, full),
     ?assertEqual(12, location(Gw)),
     ?assertEqual(13, location(location(13, Gw))).
 
-score_test() ->
+mode_test() ->
     Gw = new(<<"owner_address">>, 12),
+    ?assertEqual(full, mode(Gw)),
+    ?assertEqual(full, mode(mode(full, Gw))).
+
+mode_full_test() ->
+    Gw = new(<<"owner_address">>, 12, full),
+    ?assertEqual(full, mode(Gw)),
+    ?assertEqual(full, mode(mode(full, Gw))).
+
+mode_light_test() ->
+    Gw = new(<<"owner_address">>, 12, light),
+    ?assertEqual(light, mode(Gw)),
+    ?assertEqual(light, mode(mode(light, Gw))).
+
+score_test() ->
+    Gw = new(<<"owner_address">>, 12, full),
     fake_config(),
     ?assertEqual({1.0, 1.0, 0.25}, score(<<"score_test_gw">>, Gw, 12, fake_ledger)),
     blockchain_score_cache:stop().
 
 score_decay_test() ->
-    Gw0 = new(<<"owner_address">>, 1),
+    Gw0 = new(<<"owner_address">>, 1, full),
     Gw1 = set_alpha_beta_delta(1.1, 1.0, 300, Gw0),
     fake_config(),
     {_, _, A} = score(<<"score_decay_test_gw">>, Gw1, 1000, fake_ledger),
@@ -645,7 +697,7 @@ score_decay_test() ->
     blockchain_score_cache:stop().
 
 score_decay2_test() ->
-    Gw0 = new(<<"owner_address">>, 1),
+    Gw0 = new(<<"owner_address">>, 1, full),
     Gw1 = set_alpha_beta_delta(1.1, 10.0, 300, Gw0),
     fake_config(),
     {Alpha, Beta, Score} = score(<<"score_decay2_test">>, Gw1, 1000, fake_ledger),
@@ -655,17 +707,17 @@ score_decay2_test() ->
     blockchain_score_cache:stop().
 
 last_poc_challenge_test() ->
-    Gw = new(<<"owner_address">>, 12),
+    Gw = new(<<"owner_address">>, 12, full),
     ?assertEqual(undefined, last_poc_challenge(Gw)),
     ?assertEqual(123, last_poc_challenge(last_poc_challenge(123, Gw))).
 
 last_poc_onion_key_hash_test() ->
-    Gw = new(<<"owner_address">>, 12),
+    Gw = new(<<"owner_address">>, 12, full),
     ?assertEqual(undefined, last_poc_onion_key_hash(Gw)),
     ?assertEqual(<<"onion_key_hash">>, last_poc_onion_key_hash(last_poc_onion_key_hash(<<"onion_key_hash">>, Gw))).
 
 nonce_test() ->
-    Gw = new(<<"owner_address">>, 12),
+    Gw = new(<<"owner_address">>, 12, full),
     ?assertEqual(0, nonce(Gw)),
     ?assertEqual(1, nonce(nonce(1, Gw))).
 
