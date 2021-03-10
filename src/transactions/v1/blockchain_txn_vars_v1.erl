@@ -1118,6 +1118,12 @@ validate_var(?density_tgt_res, Value) ->
 validate_var(?hip17_interactivity_blocks, Value) ->
     validate_int(Value, "hip17_interactivity_blocks", 1, 5000, false);
 
+validate_var(?light_gateway_capabilities_mask, Value) ->
+    %% a bitmask determining capabilities of a light gateway - using a 16bit mask.
+    %% see blockchain.hrl for capability list
+    %% TODO - allow for > 16 bit mask here?
+    validate_int(Value, "light_gateway_capabilities_mask", 0, 65536, false);
+
 validate_var(Var, Value) ->
     %% something we don't understand, crash
     invalid_var(Var, Value).
