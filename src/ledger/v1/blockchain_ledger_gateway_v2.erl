@@ -76,7 +76,7 @@
 -type witnesses() :: #{libp2p_crypto:pubkey_bin() => gateway_witness()}.
 -type witnesses_int() :: [{libp2p_crypto:pubkey_bin(), gateway_witness()}].
 -type histogram() :: #{integer() => integer()}.
--type mode() :: light | non_consensus | full.
+-type mode() :: light | nonconsensus | full.
 -export_type([gateway/0, mode/0, gateway_witness/0, witnesses/0, histogram/0]).
 
 %%--------------------------------------------------------------------
@@ -660,7 +660,7 @@ mask_for_gateway_type(#gateway_v2{mode = light}, Ledger)->
         {ok, V} ->
             V
     end;
-mask_for_gateway_type(#gateway_v2{mode = non_consensus}, Ledger)->
+mask_for_gateway_type(#gateway_v2{mode = nonconsensus}, Ledger)->
     case blockchain:config(?non_consensus_gateway_capabilities_mask, Ledger) of
         {error, not_found} -> ?GW_CAPABILITIES_NON_CONSENSUS_GATEWAY;
         {ok, V} -> V
@@ -713,9 +713,9 @@ mode_light_test() ->
     ?assertEqual(light, mode(mode(light, Gw))).
 
 mode_non_consensus_test() ->
-    Gw = new(<<"owner_address">>, 12, non_consensus),
-    ?assertEqual(non_consensus, mode(Gw)),
-    ?assertEqual(non_consensus, mode(mode(non_consensus, Gw))).
+    Gw = new(<<"owner_address">>, 12, nonconsensus),
+    ?assertEqual(nonconsensus, mode(Gw)),
+    ?assertEqual(nonconsensus, mode(mode(nonconsensus, Gw))).
 
 score_test() ->
     Gw = new(<<"owner_address">>, 12, full),

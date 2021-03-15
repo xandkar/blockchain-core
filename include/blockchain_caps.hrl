@@ -14,6 +14,9 @@
                                                  bor ?GW_CAPABILITY_POC_WITNESS
                                                  bor ?GW_CAPABILITY_POC_RECEIPT
 ).
+%% TODO: maybe a full gateway should just have all bits set by default ?  that way it will always be able to do ev thing
+%% this approach would complicate things if in the future we do want to restrict a full gateway in some way...
+%% but then its not a full gateway, right?
 -define(GW_CAPABILITIES_FULL_GATEWAY, 0 bor ?GW_CAPABILITY_ROUTE_PACKETS
                                         bor ?GW_CAPABILITY_POC_CHALLENGER
                                         bor ?GW_CAPABILITY_POC_CHALLENGEE
