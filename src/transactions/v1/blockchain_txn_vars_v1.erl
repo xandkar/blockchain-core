@@ -738,9 +738,9 @@ validate_staking_keys_to_mode_mappings([{PubKey, GWMode} | T]) ->
 validate_staking_keys_to_mode_mappings([H|_T]) ->
     throw({error, {invalid_staking_to_mode_mapping, H}}).
 
-validate_staking_key_mode_mapping_value(GWMode) when   GWMode == <<"light">>
-                                              orelse GWMode == <<"nonconsensus">>
-                                              orelse GWMode == <<"full">> ->
+validate_staking_key_mode_mapping_value(GWMode) when GWMode == <<"light">>;
+                                                     GWMode == <<"nonconsensus">>;
+                                                     GWMode == <<"full">> ->
     ok;
 validate_staking_key_mode_mapping_value(GWMode) ->
     throw({error, {invalid_staking_to_mode_mapping_value, GWMode}}).
