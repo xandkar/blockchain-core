@@ -26,9 +26,7 @@
     staking_key_add_gateway/1,
     staking_key_mode_mappings_add_light_gateway/1,
     staking_key_mode_mappings_add_nonconsensus_gateway/1,
-    staking_key_mode_mappings_add_full_gateway/1,
-    staking_key_mode_mappings_light_gateway_capabilities/1,
-    poc_request_test/1
+    staking_key_mode_mappings_add_full_gateway/1
 ]).
 
 all() -> [
@@ -44,10 +42,7 @@ all() -> [
     staking_key_add_gateway,
     staking_key_mode_mappings_add_light_gateway,
     staking_key_mode_mappings_add_nonconsensus_gateway,
-    staking_key_mode_mappings_add_full_gateway,
-    staking_key_mode_mappings_light_gateway_capabilities,
-    poc_request_test
-
+    staking_key_mode_mappings_add_full_gateway
 ].
 
 %%--------------------------------------------------------------------
@@ -58,9 +53,7 @@ init_per_testcase(TestCase, Config0)  when TestCase == txn_fees_pay_with_hnt;
                                            TestCase == staking_key_add_gateway;
                                            TestCase == staking_key_mode_mappings_add_light_gateway;
                                            TestCase == staking_key_mode_mappings_add_nonconsensus_gateway;
-                                           TestCase == staking_key_mode_mappings_add_full_gateway;
-                                           TestCase == staking_key_mode_mappings_light_gateway_capabilities;
-                                           TestCase == poc_request_test ->
+                                           TestCase == staking_key_mode_mappings_add_full_gateway ->
     Config = blockchain_ct_utils:init_base_dir_config(?MODULE, TestCase, Config0),
     BaseDir = ?config(base_dir, Config),
     {ok, Sup, {PrivKey, PubKey}, _Opts} = test_utils:init(BaseDir),
