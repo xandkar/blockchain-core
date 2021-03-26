@@ -6,6 +6,7 @@
 -module(blockchain_poc_path).
 
 -include("blockchain_vars.hrl").
+-include("blockchain_caps.hrl").
 
 -export([
          build/5,
@@ -273,9 +274,11 @@ neighbors(Gw, Gateways, Ledger) ->
                   _ ->
                       G0
               end,
-              case blockchain_ledger_gateway_v2:location(G) of
-                  undefined -> Acc;
-                  Index ->
+              case {blockchain_ledger_gateway_v2:location(G),
+                    blockchain_ledger_gateway_v2:is_valid_capability(G, ?GW_CAPABILITY_POC_CHALLENGEE, Ledger)} of
+                  {undefined, _} -> Acc;
+                  {_, false} -> Acc;
+                  {Index, _} ->
                       ScaledIndex = scale(Index, H3NeighborRes),
                       case lists:member(ScaledIndex, ExclusionIndices) of
                           false ->

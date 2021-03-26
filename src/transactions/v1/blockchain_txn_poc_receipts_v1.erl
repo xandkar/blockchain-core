@@ -307,9 +307,9 @@ check_is_valid_poc(Txn, Chain) ->
 
                                                            RetB = case blockchain:config(?poc_typo_fixes, Ledger) of
                                                                       {ok, true} ->
-                                                                          blockchain_poc_path_v2:build(Target, GatewayScores, Time, Entropy, Vars);
+                                                                          blockchain_poc_path_v2:build(Target, GatewayScores, Time, Entropy, Vars, Ledger);
                                                                       _ ->
-                                                                          blockchain_poc_path_v2:build(Target, GatewayScoreMap, Time, Entropy, Vars)
+                                                                          blockchain_poc_path_v2:build(Target, GatewayScoreMap, Time, Entropy, Vars, Ledger)
                                                                   end,
                                                            maybe_log_duration(build, StartB),
                                                            RetB;
