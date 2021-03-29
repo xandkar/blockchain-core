@@ -207,38 +207,57 @@ absorb(Txn, Chain) ->
     %% Delay = delay(Txn),
     Ledger = blockchain:ledger(Chain),
     Members = ?MODULE:members(Txn),
-    Check =
+    {Gen, Check} =
         case blockchain_ledger_v1:election_height(Ledger) of
             %% no chain, genesis block
             {error, not_found} ->
-                ok;
+                {true, ok};
             {ok, BaseHeight} when Height > BaseHeight ->
-                ok;
+                {false, ok};
             {ok, BaseHeight} ->
-                {error, {duplicate_group, {?MODULE:height(Txn), BaseHeight}}}
+                {false, {error, {duplicate_group, {?MODULE:height(Txn), BaseHeight}}}}
         end,
     case Check of
         ok ->
             %% record stuff for tenuring
-            %% case blockchain_ledger_v1:config(?election_version, Ledger) of
-            %%     {ok, N} when N >= 5 ->
-            %%         lists:foreach(
-            %%           fun(M) ->
-            %%                   case blockchain_ledger_v1:get_validator(M, Ledger) of
-            %%                       {ok, V} ->
-            %%                           V1 = blockchain_ledger_validator_v1:add_recent_election(V, {Height, Delay}, Chain),
-            %%                           blockchain_ledger_v1:update_validator(V1, Ledger)
-            %%                   end
-            %%           end,
-            %%           Members);
-            %%     _ -> ok
-            %% end,
+            case blockchain_ledger_v1:config(?election_version, Ledger) of
+                {ok, N} when N >= 5 andalso Gen == false ->
+                    {ok, OldMembers0} = blockchain_ledger_v1:consensus_members(Ledger),
+                    %% filter out gatesways from both groups
+                    OldMembers = lists:filter(fun(X) -> is_validator(X, Ledger) end, OldMembers0),
+                    Members1 = lists:filter(fun(X) -> is_validator(X, Ledger) end, Members),
+                    %% get elected out members
+                    OldMembers1 = OldMembers -- Members1,
+                    lists:foreach(
+                      fun(M) ->
+                              {ok, V} = blockchain_ledger_v1:get_validator(M, Ledger),
+                              Penalty = blockchain_ledger_validator_v1:penalty(V),
+                              V1 = blockchain_ledger_validator_v1:penalty(Penalty + 1.0, V),
+                              blockchain_ledger_v1:update_validator(M, V1, Ledger)
+                      end,
+                      Members1),
+                    lists:foreach(
+                      fun(M) ->
+                              {ok, V} = blockchain_ledger_v1:get_validator(M, Ledger),
+                              %% reset penalty when elected out
+                              V1 = blockchain_ledger_validator_v1:penalty(0.0, V),
+                              blockchain_ledger_v1:update_validator(M, V1, Ledger)
+                      end,
+                      OldMembers1);
+                _ -> ok
+            end,
             {ok, Epoch} = blockchain_ledger_v1:election_epoch(Ledger),
             ok = blockchain_ledger_v1:election_epoch(Epoch + 1, Ledger),
             ok = blockchain_ledger_v1:consensus_members(Members, Ledger),
             ok = blockchain_ledger_v1:election_height(Height, Ledger);
         {error, _} = Err ->
             Err
+    end.
+
+is_validator(Addr, Ledger) ->
+    case blockchain_ledger_v1:get_validator(Addr, Ledger) of
+        {ok, _V} -> true;
+        _ -> false
     end.
 
 -spec print(txn_consensus_group()) -> iodata().

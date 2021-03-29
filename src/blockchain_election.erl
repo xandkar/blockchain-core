@@ -314,8 +314,6 @@ adjust_old_group_v2(Group, Ledger) ->
 
               DKGPenalty = calc_age_weighted_penalty(DKGPenaltyAmt, PenaltyLimit, Height,
                                                      lists:map(fun({H, D}) -> H+D end, Failures)),
-              %% TenurePenalty = max(0.0, 1.0 * (Recent - Factor)),
-              %% penalties are positive in icdf
               {Addr, normalize_float(Prob + Penalty + DKGPenalty)} % + TenurePenalty)}
       end,
       Group).
@@ -798,6 +796,7 @@ validators_filter(Ledger) ->
               Stake = blockchain_ledger_validator_v1:stake(Val),
               Status = blockchain_ledger_validator_v1:status(Val),
               Version = blockchain_ledger_validator_v1:version(Val),
+              Penalty = blockchain_ledger_validator_v1:penalty(Val),
               HB = blockchain_ledger_validator_v1:last_heartbeat(Val),
               Failures = blockchain_ledger_validator_v1:recent_failures(Val),
               case Stake >= MinStake andalso Status == staked of
@@ -807,7 +806,7 @@ validators_filter(Ledger) ->
                               maps:put(Addr, #val_v1{addr = Addr,
                                                      heartbeat = HB,
                                                      failures = Failures,
-                                                     prob = 1.0}, Acc);
+                                                     prob = Penalty}, Acc);
                           _ -> Acc
                       end;
                   _ -> Acc
@@ -828,7 +827,7 @@ val_dedup(OldGroup0, Validators0, Ledger) ->
 
     {Group, Pool} =
         maps:fold(
-          fun(Addr, Val = #val_v1{heartbeat = Last, prob = Prob, failures = Failures},
+          fun(Addr, Val = #val_v1{heartbeat = Last, failures = Failures},
               {Old, Candidates} = Acc) ->
                   Offline = (Height - Last) > (HBInterval + HBGrace),
                   case lists:member(Addr, OldGroup0) of
@@ -852,7 +851,9 @@ val_dedup(OldGroup0, Validators0, Ledger) ->
                               _ ->
                                   DKGPenalty = calc_age_weighted_penalty(DKGPenaltyAmt, PenaltyLimit, Height,
                                                                          lists:map(fun({H , D}) -> H+D end, Failures)),
-                                  case max(0.0, Prob - DKGPenalty) of
+                                  %% prob coming in here is going to be 0.0 for non-group nodes
+                                  %% so don't use it
+                                  case max(0.0, 1.0 - DKGPenalty) of
                                       %% don't even consider until some of these failures have aged out
                                       0.0 -> Acc;
                                       NewProb ->
