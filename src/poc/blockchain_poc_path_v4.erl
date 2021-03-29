@@ -14,6 +14,7 @@
 %%% * Don't include any witness whose parent is too close to any of the indices we've already seen
 %%% * Don't include any witness who have bad rssi range
 %%% * Don't include any witness who are too far from the current gateway
+%%% * Dont include any witness who do not have the required capability
 %%%
 %%% We then assign cumulative probabilities to each filtered witness. Each of those
 %%% probabilities have an associated weight to them governed by chain variables.

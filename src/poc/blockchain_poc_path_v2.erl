@@ -22,6 +22,7 @@
 %%% - Next hop witness must not be in the same hex index as the target
 %%% - Every hop in the path must be unique
 %%% - Every hop in the path must have a minimum exclusion distance
+%%% - Next Hop witness must have the required capability
 %%%
 %%% The criteria for a potential next hop witness are biased like so:
 %%% - P(WitnessRSSI)  = Probability that the witness has a good (valid) RSSI.

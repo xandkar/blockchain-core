@@ -397,12 +397,14 @@ active_gateways(Ledger, Challenger) ->
               case
                   %% if we're some other gateway who has a location
                   %% and hasn't been added to the graph and our score
-                  %% is good enough
+                  %% is good enough and we also have the required capability
                   CheckSync andalso
                   (PubkeyBin == Challenger orelse
                    blockchain_ledger_gateway_v2:location(Gateway) == undefined orelse
                    maps:is_key(PubkeyBin, Acc0) orelse
-                   Score =< MinScore)
+                   Score =< MinScore) orelse
+                   not blockchain_ledger_gateway_v2:is_valid_capability(Gateway, ?GW_CAPABILITY_POC_CHALLENGEE, Ledger)
+
               of
                   true ->
                       Acc0;
