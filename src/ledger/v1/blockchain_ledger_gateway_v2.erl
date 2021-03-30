@@ -658,17 +658,17 @@ convert(#gateway_v1{
 -spec mask_for_gateway_mode(Gateway :: gateway(), Ledger :: blockchain_ledger_v1:ledger()) -> non_neg_integer().
 mask_for_gateway_mode(#gateway_v2{mode = light}, Ledger)->
     case blockchain:config(?light_gateway_capabilities_mask, Ledger) of
-        {error, not_found} -> ?GW_CAPABILITIES_LIGHT_GATEWAY;
+        {error, not_found} -> ?GW_CAPABILITIES_LIGHT_GATEWAY_V1;
         {ok, V} -> V
     end;
 mask_for_gateway_mode(#gateway_v2{mode = nonconsensus}, Ledger)->
     case blockchain:config(?non_consensus_gateway_capabilities_mask, Ledger) of
-        {error, not_found} -> ?GW_CAPABILITIES_NON_CONSENSUS_GATEWAY;
+        {error, not_found} -> ?GW_CAPABILITIES_NON_CONSENSUS_GATEWAY_V1;
         {ok, V} -> V
     end;
 mask_for_gateway_mode(#gateway_v2{mode = full}, Ledger)->
     case blockchain:config(?full_gateway_capabilities_mask, Ledger) of
-        {error, not_found} -> ?GW_CAPABILITIES_FULL_GATEWAY;
+        {error, not_found} -> ?GW_CAPABILITIES_FULL_GATEWAY_V1;
         {ok, V} -> V
     end.
 %% ------------------------------------------------------------------
