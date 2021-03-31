@@ -22,9 +22,13 @@
     send_rejection/2,
     handle_client_msg/2,
     handle_server_msg/2,
+    handle_offer/3,
+    handle_next_offer/1,
 
     send_offer/2,
-    send_packet/2
+    send_packet/2,
+
+    is_active_sc/2
 ]).
 
 -record(handler_state, {
@@ -34,15 +38,24 @@
           offer_queue = [] :: [{blockchain_state_channel_packet_offer_v1:offer(), pos_integer()}],
           handler_mod = undefined :: atom(),
           pending_offer_limit = undefined :: undefined | pos_integer(),
-          encode_pb = true :: boolean
+          encode_pb = true :: boolean()
          }).
 
 
 -type handler_state() :: #handler_state{}.
 -export_type([handler_state/0]).
 
+-spec new_handler_state() -> handler_state().
 new_handler_state()->
     #handler_state{}.
+-spec new_handler_state(Chain :: blockchain:blockchain(),
+                        Ledger ::  undefined | blockchain_ledger_v1:ledger(),
+                        PendingPacketOffers :: #{binary() => {blockchain_state_channel_packet_offer_v1:offer(), pos_integer()}},
+                        OfferQueue :: [{blockchain_state_channel_packet_offer_v1:offer(), pos_integer()}],
+                        HandlerMod :: atom(),
+                        PendingOfferLimit :: undefined | pos_integer(),
+                        EncodePB :: boolean()
+    ) -> handler_state().
 new_handler_state(Chain, Ledger, PendingPacketOffers, OfferQueue, HandlerMod, PendingOfferLimit, EncodePB)->
     #handler_state{
         chain = Chain,
@@ -62,7 +75,7 @@ new_handler_state(Chain, Ledger, PendingPacketOffers, OfferQueue, HandlerMod, Pe
 chain(#handler_state{chain=V}) ->
     V.
 
--spec ledger(handler_state()) -> blockchain_ledger_v1:ledger().
+-spec ledger(handler_state()) -> undefined | blockchain_ledger_v1:ledger().
 ledger(#handler_state{ledger=V}) ->
     V.
 

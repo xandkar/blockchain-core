@@ -10,7 +10,7 @@
 %% ------------------------------------------------------------------
 -export([
     msg/2,
-    init/1,
+    init/2,
     handle_info/2
 ]).
 
@@ -26,8 +26,8 @@ close(_HandlerPid)->
     %% TODO - implement close in grpc stream
     ok.
 
--spec init( grpcbox_stream:t()) ->  grpcbox_stream:t().
-init(StreamState)->
+-spec init(atom(), grpcbox_stream:t()) -> grpcbox_stream:t().
+init(_RPC, StreamState)->
     lager:debug("initiating grpc state channel server handler with state ~p", [StreamState]),
     HandlerMod = application:get_env(blockchain, sc_packet_handler, undefined),
     OfferLimit = application:get_env(blockchain, sc_pending_offer_limit, 5),

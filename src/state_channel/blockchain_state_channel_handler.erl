@@ -83,7 +83,7 @@ init(server, _Conn, [_Path, Blockchain]) ->
 
 handle_data(client, Data, HandlerState) ->
     %% get ledger if we don't yet have one
-    Ledger = case blockchain_state_channel_common:ledger() of
+    Ledger = case blockchain_state_channel_common:ledger(HandlerState) of
                  undefined ->
                      case blockchain_worker:blockchain() of
                          undefined ->
